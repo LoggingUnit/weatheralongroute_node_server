@@ -5,41 +5,34 @@ const sessionCfg = require('../../config/sessionCfg');
 
 module.exports = function (app, db) {
 
-  app.options('*', (req, res) => {
-    // Website you wish to allow to connect
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    // Request methods you wish to allow
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-    // Request headers you wish to allow
-    res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type', 'Content-Type');
-    // Set to true if you need the website to include cookies in the requests sent
-    // to the API (e.g. in case you use sessions)
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.send();
-  })
-
   //check current session
+  app.use(setUnsafeHeaders);
   app.use(checkUserSession);
   app.post('/login', loginUser);
 
+  function setUnsafeHeaders(req, res, next) {
+    res.set(sessionCfg.unsafeHeaders);
+    next();
+  };
+
   function checkUserSession(req, res, next) {
     console.log('[MW] check authentication')
-    if (req.originalUrl === '/login' || req.originalUrl === '/users') {
+    if (req.originalUrl === '/login' || req.originalUrl === '/users' || req.method === 'OPTIONS') {
+      console.log('...skipped')
       next();
     } else if (!req.get('Authorization')) {
-      console.log('No Authorization header added');
-      res.send({ message: 'No Authorization header added' });
+      console.log(`Access denied: no auth. header to ${req.method} url: ${req.originalUrl}`);
+      res.status(401).send({ error: `Access denied: no auth. header to ${req.method} url: ', ${req.originalUrl}` });
     } else {
       let token = req.get('Authorization').split(' ')[1];
-      console.log(token);
       checkToken(token)
         .then(result => {
-          console.log('[MW] check authentication passed');
+          console.log(`Access granted: ${result} to do ${req.method} with url ${req.originalUrl}`);
           next();
         })
         .catch(error => {
-          console.log('[MW] check authentication not passed:', error);
-          res.send(token);
+          console.log(`Access denied: ${error} to do ${req.method} with url: ${req.originalUrl}`);
+          res.status(401).send({ error: `Access denied: ${error} to do ${req.method} with url: ${req.originalUrl}` });
         })
     }
   }
@@ -53,12 +46,11 @@ module.exports = function (app, db) {
         if (err) {
           reject(err);
         } else if (!sessionFound) {
-          reject({ message: 'Incorrect token.' });
+          reject('incorrect credentials');
         } else if (date >= sessionFound.expireAt) {
           console.log(Math.floor(date), sessionFound.expireAt);
-          reject({ message: 'Session expired.' });
+          reject('session expired');
         } else {
-          console.log('Session:', sessionFound, ' valid');
           resolve(sessionFound);
         }
       })
@@ -72,14 +64,14 @@ module.exports = function (app, db) {
       if (err) {
         res.send(err);
       } else if (!userFound) {
-        res.send({ message: 'Incorrect username.' });
+        res.status(403).send({ error: `Access denied: incorrect username ${req.originalUrl}` });
       } else if (req.body.userPassword !== userFound.userPassword) {
         console.log(req.body.userPassword, userFound.userPassword);
-        res.send({ message: 'Incorrect password.' });
+        res.status(403).send({ error: `Access denied: incorrect password ${req.originalUrl}` });
       } else {
         createSession(userFound.userName)
           .then(result => {
-            console.log('New session:', result);
+            console.log('New session created:', result);
             res.send(result);
           })
           .catch(error => res.send(result));

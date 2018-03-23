@@ -3,24 +3,53 @@ var ObjectID = require('mongodb').ObjectID;
 
 module.exports = function (app, db) {
 
-  app.get('/users/:user', (req, res) => {
-    const user = req.params.user;
-    const details = { 'user': user };
-    db.collection('users').findOne(details, (err, item) => {
-      if (err) {
-        res.send({ 'error': 'An error has occurred' });
-      } else {
-        if (!item) {
-          res.send({ 'error': 'No user found' });
+  app.get('/users/:token', userGetController);
+
+  function userGetController(req, res) {
+    console.log(`users_routes.js userGetController ${req.method} to ${req.originalUrl}`);
+    let token = req.get('Authorization').split(' ')[1];
+    findSessionByToken(token)
+      .then(result => findUserByUserName(result.userName),
+        error => console.log(error))
+      .then(result => {
+        console.log(result);
+        res.send(result);
+      },
+        error => console.log(error));
+  }
+
+  function findSessionByToken(token) {
+    return new Promise((resolve, reject) => {
+      const details = { '_id': new ObjectID(token) };
+      db.collection('sessions').findOne(details, (err, item) => {
+        if (err) {
+          reject({ 'error': 'An error has occurred' });
+        } else {
+          if (!item) {
+            reject({ 'error': 'No session found' });
+          }
+          resolve(item);
         }
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-        res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type', 'Content-Type');
-        res.setHeader('Access-Control-Allow-Credentials', true);
-        res.send(item);
-      }
-    });
-  });
+      })
+    })
+  }
+
+  function findUserByUserName(userName) {
+    return new Promise((resolve, reject) => {
+      const details = { 'userName': userName };
+
+      db.collection('users').findOne(details, (err, item) => {
+        if (err) {
+          reject({ 'error': 'An error has occurred' });
+        } else {
+          if (!item) {
+            reject({ 'error': 'No user found' });
+          }
+          resolve(item);
+        }
+      })
+    })
+  }
 
   app.post('/users', (req, res) => {
     console.log('[POST] users')
@@ -29,15 +58,6 @@ module.exports = function (app, db) {
       if (err) {
         res.send({ 'error': 'An error has occurred' });
       } else {
-        // Website you wish to allow to connect
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        // Request methods you wish to allow
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-        // Request headers you wish to allow
-        res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type', 'Content-Type');
-        // Set to true if you need the website to include cookies in the requests sent
-        // to the API (e.g. in case you use sessions)
-        res.setHeader('Access-Control-Allow-Credentials', true);
         res.send(result.ops[0]);
       }
     });
@@ -51,10 +71,6 @@ module.exports = function (app, db) {
       if (err) {
         res.send({ 'error': 'An error has occurred' });
       } else {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-        res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type', 'Content-Type');
-        res.setHeader('Access-Control-Allow-Credentials', true);
         res.send('User ' + user + ' deleted!');
       }
     });
