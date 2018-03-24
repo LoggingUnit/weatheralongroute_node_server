@@ -8,31 +8,42 @@ module.exports = function (app, db) {
   //check current session
   app.use(setUnsafeHeaders);
   app.use(checkUserSession);
-  app.post('/login', loginUser);
 
-  function setUnsafeHeaders(req, res, next) {
-    res.set(sessionCfg.unsafeHeaders);
-    next();
-  };
+  app.post('/auth/login', loginUser);
+  app.delete('/auth/logout', logoutUser);
+
+  function logoutUser(req, res, next) {
+    let details = { userName: req.body.userName };
+    db.collection('sessions').remove(details, (err, item) => {
+      if (err) {
+        res.send({ 'error': 'An error has occurred' });
+      } else {
+        res.send('Session for ' + req.body.userName + ' deleted!');
+      }
+    });
+  }
+
 
   function checkUserSession(req, res, next) {
-    console.log('[MW] check authentication')
-    if (req.originalUrl === '/login' || req.originalUrl === '/users' || req.method === 'OPTIONS') {
-      console.log('...skipped')
+    if (req.originalUrl === '/auth/login' ||
+      req.originalUrl === '/users' ||
+      req.originalUrl === '/auth/logout' ||
+      req.method === 'OPTIONS'
+    ) {
       next();
     } else if (!req.get('Authorization')) {
-      console.log(`Access denied: no auth. header to ${req.method} url: ${req.originalUrl}`);
-      res.status(401).send({ error: `Access denied: no auth. header to ${req.method} url: ', ${req.originalUrl}` });
+      console.log(`Access denied: no auth. header to ${req.method} by following URL:${req.originalUrl}`);
+      res.status(401).send({ error: `Access denied: no auth. header to ${req.method} by following URL:', ${req.originalUrl}` });
     } else {
       let token = req.get('Authorization').split(' ')[1];
       checkToken(token)
         .then(result => {
-          console.log(`Access granted: ${result} to do ${req.method} with url ${req.originalUrl}`);
+          console.log(`Access granted: ${result.userName} to ${req.method} by following URL:${req.originalUrl}`);
           next();
         })
         .catch(error => {
-          console.log(`Access denied: ${error} to do ${req.method} with url: ${req.originalUrl}`);
-          res.status(401).send({ error: `Access denied: ${error} to do ${req.method} with url: ${req.originalUrl}` });
+          console.log(`Access denied: ${error} to ${req.method} by following URL:${req.originalUrl}`);
+          res.status(401).send({ error: `Access denied: ${error} to ${req.method} by following URL:${req.originalUrl}` });
         })
     }
   }
@@ -58,7 +69,7 @@ module.exports = function (app, db) {
   }
 
   function loginUser(req, res) {
-    console.log('[POST] loginUser');
+    console.log('Attempt to login by user:', req.body.userName);
     let details = { userName: req.body.userName };
     db.collection('users').findOne(details, (err, userFound) => {
       if (err) {
@@ -71,7 +82,7 @@ module.exports = function (app, db) {
       } else {
         createSession(userFound.userName)
           .then(result => {
-            console.log('New session created:', result);
+            console.log('Session created:\n', result);
             res.send(result);
           })
           .catch(error => res.send(result));
@@ -81,7 +92,7 @@ module.exports = function (app, db) {
 
   function createSession(user) {
     return new Promise((resolve, reject) => {
-      console.log('Create session for', user);
+      console.log(`Session creating for ${user}:`);
       let date = new Date();
       let expireAt = Math.floor(date.getTime() / 1000) + sessionCfg.lifeTime;
       let session = {
@@ -94,13 +105,14 @@ module.exports = function (app, db) {
           reject(err)
         } else {
           if (item) {
-            console.log('Old session of user ', session.userName, ' deleted');
+            console.log('Session obsolate removed for', session.userName);
           }
 
           db.collection('sessions').insert(session, (err, result) => {
             if (err) {
               reject(err)
             } else {
+              console.log('Session created for', session.userName);
               resolve(result.ops[0]);
             }
           });
@@ -108,4 +120,9 @@ module.exports = function (app, db) {
       });
     })
   }
+
+  function setUnsafeHeaders(req, res, next) {
+    res.set(sessionCfg.unsafeHeaders);
+    next();
+  };
 };

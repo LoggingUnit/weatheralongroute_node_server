@@ -12,18 +12,6 @@ module.exports = function (app, db) {
       })
   })
 
-  app.get('/trips/:user/:id', (req, res) => {
-    const id = req.params.id;
-    const details = { '_id': new ObjectID(id) };
-    db.collection('trips').findOne(details, (err, item) => {
-      if (err) {
-        res.send({ 'error': 'An error has occurred' });
-      } else {
-        res.send(item);
-      }
-    });
-  });
-
   app.post('/trips', (req, res) => {
     console.log('[POST] trips')
     const trip = req.body;
