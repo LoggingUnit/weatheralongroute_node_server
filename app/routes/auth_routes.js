@@ -2,6 +2,7 @@
 var ObjectID = require('mongodb').ObjectID;
 
 const sessionCfg = require('../../config/sessionCfg');
+const allowedPaths = require('../../config/allowedPaths').allowedPaths;
 
 module.exports = function (app, db) {
 
@@ -23,13 +24,18 @@ module.exports = function (app, db) {
     });
   }
 
+  function isRequestAllowedWithNoAuthCheck(req) {
+    if (req.method === 'OPTIONS') return true;
+    let flag = false;
+    allowedPaths.forEach(i => {
+      req.originalUrl.search(i) === (-1) ? null : flag = true;
+    });
+    return flag;
+  }
 
   function checkUserSession(req, res, next) {
-    if (req.originalUrl === '/auth/login' ||
-      req.originalUrl === '/users' ||
-      req.originalUrl === '/auth/logout' ||
-      req.method === 'OPTIONS'
-    ) {
+    if (isRequestAllowedWithNoAuthCheck(req)) {
+      console.log(req.originalUrl);
       next();
     } else if (!req.get('Authorization')) {
       console.log(`Access denied: no auth. header to ${req.method} by following URL:${req.originalUrl}`);
